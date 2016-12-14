@@ -1,4 +1,4 @@
-require_relative "../base.rb"
+require_relative "../modules/base.rb"
 
 module Crawler
   module Default
