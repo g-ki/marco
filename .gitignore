@@ -2,3 +2,5 @@
 .env
 
 Gemfile.lock
+tmp/*
+!*/.keep
