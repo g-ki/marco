@@ -33,7 +33,7 @@ class WebCrawler
     crawler = crawler_class.new logger
 
     begin
-      crawler.get msg[:url], action
+      crawler.get! msg[:url], action
     rescue Mechanize::ResponseCodeError => e
       response[:stats].merge!({
         error: true,

@@ -1,7 +1,7 @@
 module Crawler
 end
 
-require "crawler/manager"
+require_relative "crawler/manager"
 
-require "crawler/base"
-require "crawler/extractor"
+require_relative "crawler/base"
+require_relative "crawler/extractor"

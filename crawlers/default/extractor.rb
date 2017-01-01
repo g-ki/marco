@@ -10,7 +10,7 @@ module Default
       page.links.each do |link|
         begin
           url = link.resolved_uri.to_s
-          craw(link.resolved_uri.to_s, :all_links)
+          get(url, :all_links)
         rescue Exception => e
           @logger.error e
         end
