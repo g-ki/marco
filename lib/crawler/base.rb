@@ -46,7 +46,7 @@ module Crawler
     end
 
     def name
-      @crawler_name ||= self.class.name.gsub("Crawler::", '')
+      self.class.name
     end
   end
 end

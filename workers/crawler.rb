@@ -4,7 +4,7 @@ require 'mechanize'
 require 'json'
 require 'redis'
 
-require_relative "crawler"
+require_relative "../lib/crawler"
 
 rmq_addr = "rabbitmq"
 Sneakers.configure :log => STDOUT, :amqp => "amqp://guest:guest@#{rmq_addr}:5672"
@@ -21,7 +21,7 @@ class WebCrawler
     msg = JSON.parse(msg, symbolize_names: true)
     crawler_class, action = msg[:action].split('#')
 
-    crawler_class = Crawler.load crawler_class
+    crawler_class = Crawler::Manager.load crawler_class
 
     response = {
       msg: msg,

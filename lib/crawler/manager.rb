@@ -1,17 +1,18 @@
-module Crawler
+module Crawler::Manager
 
   ##
   # crawler : String
   # input : "Default::Extractor" -> path = 'default/extractor.rb'
-  # return Crawler::Default::Extractor
+  # return Default::Extractor
   ##
   def self.load(crawler)
     path = crawler.split('::').map { |s| underscore s }.join('/') + '.rb'
 
-    require_relative path
-    Crawler.const_get crawler
+    require_relative '../../crawlers/' + path
+    Object.const_get crawler
   end
 
+  private
   ##
   # str   : String
   # input : "LinkExtractor"

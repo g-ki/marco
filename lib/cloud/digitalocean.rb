@@ -152,30 +152,3 @@ class ElasticMarco
   end
 
 end
-
-def print_usage
-  puts "Commands:"
-  puts "#{$0} print                   # Print backend droplets in inventory file"
-  puts "#{$0} create <TYPE>           # Create a new backend droplet"
-  puts "#{$0} delete <LINE_NUMBER>    # Delete a droplet"
-end
-
-
-if ARGV[0] == nil
-  print_usage
-else
-  e_marco = ElasticMarco.new
-
-  case ARGV[0]
-  when "print"
-    e_marco.print_inventory
-  when "create"
-    e_marco.create_server(ARGV[1].to_s)
-  when "delete"
-    if ARGV[1] != nil
-      e_marco.delete_server(ARGV[1].to_i)
-    else
-      puts "Specify which droplet to delete!"
-    end
-  end
-end
