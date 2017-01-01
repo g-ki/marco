@@ -2,11 +2,10 @@ source 'https://rubygems.org'
 
 gem 'nokogiri'
 gem 'mechanize'
+gem 'sneakers'
+gem 'json'
 
 gem "redis"
 gem "hiredis"
-gem "em-synchrony"
 
-gem 'sneakers'
-
-gem 'json'
+gem "droplet_kit"
