@@ -4,3 +4,6 @@
 Gemfile.lock
 tmp/*
 !*/.keep
+
+config/cloud/*
+!config/cloud/scripts/*
