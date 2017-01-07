@@ -15,4 +15,4 @@ COPY . .
 
 VOLUME ["$INSTALL_PATH"]
 
-CMD ["sneakers", "work", "MarcoQueue", "--require", "workers/crawler.rb"]
+CMD ["sneakers", "work", "WebCrawler", "--require", "workers/crawler.rb"]
