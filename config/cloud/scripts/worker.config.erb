@@ -8,6 +8,6 @@ sudo usermod -aG docker $(whoami)
 sudo apt-get -y install python-pip
 sudo pip install docker-compose
 
-docker build https://github.com/gk95/marco.git
+docker build https://github.com/gk95/marco.git -t marco
 
-docker swarm join --token <%= worker_token %> <%= master.private_ip %>:2377
+docker swarm join --token <%= token %> <%= master.private_ip %>:2377

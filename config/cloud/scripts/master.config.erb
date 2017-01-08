@@ -8,6 +8,6 @@ sudo usermod -aG docker $(whoami)
 sudo apt-get -y install python-pip
 sudo pip install docker-compose
 
-docker build https://github.com/gk95/marco.git
+docker build https://github.com/gk95/marco.git -t marco
 
 docker swarm init --advertise-addr $(ifconfig eth1 | grep 'inet addr:' | cut -d: -f2 | awk '{ print $1}')
