@@ -1,154 +1,129 @@
 #!/usr/bin/ruby
 
 require 'droplet_kit'
-require 'erb'
-require 'fileutils'
-require 'yaml'
-require 'json'
+require 'net/ssh'
 
-class ElasticMarco
-  def initialize
-    config = YAML::load(File.open('config.yml'))
+module Cloud
+  class DigitalOcean
+    include Cloud
+    attr_reader :droplets
+    alias_method :machines, :droplets
 
-    @ssh_key_ids = config['ssh_key_ids'].to_a
+    def initialize
+      load_config
 
-    @files = {
-      inventory: config['inventory_file'],
-      master: config['userdata_master'],
-      worker: config['userdata_worker']
-    }
+      @client = DropletKit::Client.new(access_token: @config['token'])
 
-    @hostname_prefix = config['droplet_options']['hostname_prefix']
-    @region = config['droplet_options']['region']
-    @size = config['droplet_options']['size']
-    @image = config['droplet_options']['image']
+      load_droplets
+    end
 
-    @client = DropletKit::Client.new(access_token: config['token'])
-    @inventory = {}
+    def load_droplets
+      @droplets = @client.droplets.all.select { |d| d.name[/^#{@config['prefix']}-/] }
+    end
 
-    get_inventory
-  end
+    def master?
+      master != nil
+    end
 
-  def get_inventory
+    def master
+      @master ||= @droplets.find { |d| droplet_type(d) == 'master' }
+    end
 
-    if File.exist?(@files[:inventory]) == false
-      raise "Inventory file doesn't exist! Create one."
-    else
-      file = File.read(@files[:inventory])
-      file = "{}" if (file.empty?)
-      @inventory = JSON.parse file, symbolize_names: true
+    def workers
+      @droplets.reject { |d| master.id == d.id }
+    end
 
-      #load
-      @inventory[:droplets].each do |droplet_id, value|
-        droplet = @client.droplets.find(id: droplet_id)
-        if droplet == '{"id":"not_found","message":"The resource you were accessing could not be found."}'
-          raise "Inventory file contains a non-existent droplet id (#{droplet.id})!"
-        else
-          @inventory[:droplets][droplet_id][:droplet] = droplet
+    def droplet_type(droplet)
+      droplet.name.match(/^#{@config['prefix']}-(\w+)-/)[1]
+    end
+
+    def print_info
+      if @droplets.size == 0
+        puts "There is no droplets created. Create one.\n"
+      else
+        @droplets.each do |d|
+          type = droplet_type d
+          puts "#{d.id} #{d.name} (type: #{type}, ip: #{d.public_ip}, pvt ip: #{d.private_ip}, status: #{d.status})"
         end
+        nil
       end
     end
-  end
 
-  def print_inventory
-    if @inventory[:droplets].size == 0
-      puts "The inventory file is empty. Use the create command.\n"
-    else
-      @inventory[:droplets].each do |id, value|
-        droplet = value[:droplet]
-        type = value[:type]
-        puts "#{droplet.id} #{droplet.name} (type: #{type}, ip: pvt ip: #{droplet.public_ip} pvt ip: #{droplet.private_ip}, status: #{droplet.status})"
+    def create
+      type = master? ? 'worker' : 'master'
+
+      hostname = "#{@config['prefix']}-#{type}-#{droplets.size}" # TODO: better naming, avoid collision
+
+      userdata_file = File.join(ENV['MARCO_ROOT'], 'config', 'cloud', 'scripts', type + '.config.erb')
+
+      userdata = parse_datafile(userdata_file)
+
+      options = @config['droplet']
+
+      droplet = DropletKit::Droplet.new(
+        name: hostname,
+        region: options['region'],
+        size: options['size'],
+        image: options['image'],
+        private_networking: true,
+        ssh_keys: @config['ssh_key_ids'],
+        user_data: userdata
+      )
+
+      created = @client.droplets.create(droplet)
+      droplet_id = created.id
+
+      if (created.status == 'new')
+        while created.status != 'active'
+          print '.'
+          sleep(15)  # wait for droplet to become active before checking again
+          created = @client.droplets.find(id: droplet_id)
+        end
+
+        @droplets << created
+
+        if type == 'master'
+          print "Get swarm token... (30 secs)"
+          sleep(30)
+          token
+        end
+      else
+        puts "Some error has occurred on droplet create (status was not 'new')"
+        return false
       end
-      nil
+
+      return true
     end
-  end
 
-  def create_server(type = 'worker')
-    hostname = "#{@hostname_prefix}-#{type}-#{@inventory[:droplets].size}"
-    userdata_file = @files[type.to_sym]
+    def delete(droplet_id)
+      @client.droplets.delete(id: droplet_id) # validate success of this operation
+      droplets.reject! { |d| d.id == droplet_id }
+      puts "Success: #{droplet_id} deleted"
+    end
 
-    userdata = parse_datafile(userdata_file)
+    def token()
+      return @worker_token if @worker_token
 
-    droplet = DropletKit::Droplet.new(
-      name: hostname,
-      region: @region,
-      size: @size,
-      image: @image,
-      private_networking: true,
-      ssh_keys: @ssh_key_ids,
-      user_data: userdata
-    )
+      master_ip = master.public_ip
+      token = ""
 
-    created = @client.droplets.create(droplet)
-    droplet_id = created.id
+      Net::SSH.start(master_ip, 'root', paranoid: false) do |ssh|
+        while token.empty?
+          ssh.exec! "docker swarm join-token worker -q" do |channel, stream, data|
+            token << data if stream == :stdout
+          end
 
-    if (created.status == 'new')
-      while created.status != 'active'
-        print '.'
-        sleep(15)  # wait for droplet to become active before checking again
-        created = @client.droplets.find(id: droplet_id)
+          if token.empty?
+            print '..'
+            sleep(15)
+          end
+        end
+        puts token
+        @worker_token = token.chomp
       end
-      # droplet status is now 'active'
-      @inventory[:droplets][created.id] = { type: type, droplet: created }
 
-      save_inventory
-      puts "Success: #{droplet_id} created and added to backend."
-
-      if type == 'master'
-        print "Get swarm token... (30 secs)"
-        sleep(30)
-        worker_token reload: true
-        save_inventory
-      end
-    else
-      puts "Some error has occurred on droplet create (status was not 'new')"
+      @worker_token
     end
+
   end
-
-  def delete_server(droplet_id)
-    if @inventory[:droplets][droplet_id.to_s.to_sym].nil?
-      raise "Specified line does not exist in inventory! (line_number)"
-    else
-      @client.droplets.delete(id: droplet_id)
-      @inventory[:droplets].delete droplet_id.to_s.to_sym
-      save_inventory
-      puts "Success: #{droplet_id} deleted and removed from backend."
-    end
-  end
-
-  def master
-    return @master if @master
-    @master = @inventory[:droplets].select { |k, v| v[:type] == 'master' }.values.first[:droplet]
-  end
-
-  def worker_token(reload: false)
-    return @inventory[:worker_token] if !reload && @inventory[:worker_token]
-
-    master_ip = master.public_ip
-
-    cmd = "ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no root@#{master_ip} docker swarm join-token worker -q"
-    token = `#{cmd}`
-    while $?.exitstatus != 0
-      print ".."
-      sleep(15)
-      token = `#{cmd}`
-    end
-    @inventory[:worker_token] = token.chomp
-  end
-
-  def parse_datafile(file)
-    template = File.open(file).read
-    renderer = ERB.new(template)
-
-    renderer.result(binding)
-  end
-
-  def save_inventory
-    json = @inventory.to_json
-    inv = JSON.parse json, symbolize_names: true
-    inv[:droplets].each {|k, v| v.delete(:droplet) }
-    File.open('inventory.json', 'w') { |f| f.puts inv.to_json }
-    puts "Inventory is saved!!!"
-  end
-
 end
