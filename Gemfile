@@ -5,7 +5,10 @@ gem 'mechanize'
 gem 'sneakers'
 gem 'json'
 
-gem "redis"
-gem "hiredis"
+gem 'redis'
+gem 'hiredis'
 
-gem "droplet_kit"
+gem 'droplet_kit'
+
+gem 'thor'
+gem 'net-ssh'
