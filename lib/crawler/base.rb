@@ -1,11 +1,24 @@
 require 'mechanize'
 
+require 'resolv'
+
+def dns_check(key)
+  Resolv::DNS.new.getaddress(key)
+rescue
+  false
+end
+
 module Crawler
   module Base
     attr_reader :queue
 
     def initialize(logger)
       @mech = Mechanize.new
+
+      if dns_check('tor-proxy')
+        @mech.set_proxy('tor-proxy', 5566)
+      end
+
       @logger = logger
       @queue = []
     end
