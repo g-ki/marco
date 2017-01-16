@@ -1,9 +1,8 @@
 require 'mechanize'
-
 require 'resolv'
 
 def dns_check(key)
-  Resolv::DNS.new.getaddress(key)
+  Resolv.getaddress(key)
 rescue
   false
 end
@@ -15,9 +14,7 @@ module Crawler
     def initialize(logger)
       @mech = Mechanize.new
 
-      if dns_check('tor-proxy')
-        @mech.set_proxy('tor-proxy', 5566)
-      end
+      @mech.set_proxy('tor-proxy', 5566) if dns_check('tor-proxy')
 
       @logger = logger
       @queue = []
@@ -50,7 +47,7 @@ module Crawler
       link = {
         url: url,
         action: "#{name}##{callback}",
-        action_args: args
+        args: args
       }
 
       @queue << link
