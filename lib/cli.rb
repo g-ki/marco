@@ -71,5 +71,17 @@ module Marco
       client.machines.each { |m| client.delete(m.id) }
     end
 
+    desc "rebuild CLOUD", "Rebuild marco image on all machines."
+    def rebuild(cloud)
+      client = Cloud::DigitalOcean.new
+      client.machines.each do |machine|
+        m_ip = machine.public_ip
+        Net::SSH.start(m_ip, 'root', paranoid: false) do |ssh|
+          ssh.exec! "docker build https://github.com/gk95/marco.git -t marco"
+        end
+        puts "Machine: #{m_ip} pulled from github!!!"
+      end
+    end
+
   end
 end
