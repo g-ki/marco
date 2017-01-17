@@ -6,53 +6,58 @@ require 'redis'
 
 require_relative "../lib/crawler"
 
-rmq_addr = "rabbitmq"
-Sneakers.configure :log => STDOUT, :amqp => "amqp://guest:guest@#{rmq_addr}:5672"
+Sneakers.configure :log => STDOUT, :amqp => "amqp://guest:guest@rabbitmq:5672"
 Sneakers.logger.level = Logger::INFO
 Thread.abort_on_exception = true
 
 class WebCrawler
   include Sneakers::Worker
 
-  from_queue 'web_pages'
+  from_queue 'in_pages',
+              :workers => 2
+              :threads => 2,
+              :prefetch => 4,
 
   def work(msg)
-    logger.info '<Recived>'
-    msg = JSON.parse(msg, symbolize_names: true)
-    crawler_class, action = msg[:action].split('#')
+    req = JSON.parse(msg, symbolize_names: true)
+    crawler_class, action = req[:action].split('#')
 
     crawler_class = Crawler::Manager.load crawler_class
 
-    response = {
-      msg: msg,
-      stats: {
-        error: false
-      }
-    }
-
     crawler = crawler_class.new logger
+    res = respond_to { crawler.get! req[:url], action, *req[:args] }
+
+    res[:links] = crawler.queue
+    res[:id] = req[:id]
+
+    publish(res.to_json, to_queue: 'out_queue')
+    logger.info "<#{req[:url]} was crawled! [STATUS: #{res[:status]}]>"
+
+    ack!
+  end
+
+  private
+
+  def respond_to()
+    response = { status: 200 } # OK
 
     begin
-      crawler.get! msg[:url], action
+      yield
     rescue Mechanize::ResponseCodeError => e
-      response[:stats].merge!({
-        error: true,
-        response_code: e.response_code
-      })
+      response[:status] = e.response_code
       logger.error e
-    rescue Mechanize::Error, Timeout::Error => e
-      response[:stats].merge!({
-        error: true
-      })
+    rescue Mechanize::Error => e
+      response[:status] = -1
+      logger.error e
+    rescue Timeout::Error => e
+      response[:status] = -2
+      logger.error e
+    rescue StandardError => e
+      response[:status] = -3
       logger.error e
     end
 
-    response[:links] = crawler.queue
-
-    publish(response.to_json, to_queue: 'craw_queue')
-    logger.info "<#{msg[:url]} was crawled!>"
-
-    return reject! if response[:stats][:error]
-    ack!
+    response
   end
+
 end

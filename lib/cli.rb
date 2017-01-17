@@ -34,6 +34,7 @@ module Marco
     option :supervisors, type: :numeric, default: 1
     option :useTor, type: :boolean
     option :tors, type: :numeric
+    option :db
     def start(cloud)
       client = Cloud::DigitalOcean.new
 
@@ -41,8 +42,24 @@ module Marco
       Net::SSH.start(master_ip, 'root', paranoid: false) do |ssh|
         ssh.exec! "docker network create --driver overlay marco-net"
 
+        if options[:db]
+          data_v = "mongodata_#{client.master.name}"
+          config_v = "mongoconfig_#{client.master.name}"
+
+          ssh.exec! "docker volume create --name #{data_v}"
+          ssh.exec! "docker volume create --name #{config_v}"
+
+          ssh.exec! "docker service create --network marco-net --mount type=volume,source=#{data_v},target=/data/db --mount type=volume,source=#{config_v},target=/data/configdb --constraint 'node.hostname == #{client.master.name}' --name mongo mongo:3.4"
+
+          puts "Wait mongo..."
+          sleep(10)
+
+          ssh.exec! "docker service create --name mongoclient --network marco-net -p 3000:3000 --env MONGO_URL=mongodb://mongo:27017/client mongoclient/mongoclient"
+        end
+
         ssh.exec "docker service create --name rabbitmq -p 8080:15672 --network marco-net rabbitmq:3.6-management"
         ssh.exec "docker service create --name redis --network marco-net redis:3.2"
+
 
         tors = options[:tors] || options[:crawlers] * 2
         puts "tors: #{tors}" if options[:useTor]
