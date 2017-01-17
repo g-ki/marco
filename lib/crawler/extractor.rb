@@ -9,8 +9,8 @@ module Crawler
       extractable = self.methods.select { |m| m != :extract_data && m.to_s[/extract_/] }
       extractable.each do |extract_method|
         begin
-          method_key = extract_method.match(/extract_(.+)$/)[1]
-          result[method_key] = public_send(extract_method, data_block)
+          method_key = extract_method.to_s.match(/extract_(.+)$/)[1]
+          result[method_key.to_sym] = public_send(extract_method, data_block)
         rescue => e
           @logger.error "EXTRACT_ERROR: #{extract_method}: #{e}"
         end

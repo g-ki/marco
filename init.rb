@@ -5,17 +5,13 @@ require 'json'
 Sneakers.configure :log => STDOUT, :amqp => "amqp://guest:guest@rabbitmq:5672", workers: 1
 Sneakers.logger.level = Logger::INFO
 
-pub = Sneakers::Publisher.new :amqp => "amqp://guest:guest@rabbitmq:5672"
+seeds = [
+  { url: 'http://www.biznes-katalog.bg/', action: "Default::Extractor#get_page", args: [] },
+  { url: 'http://www.dmoz.org/', action: "Default::Extractor#get_page", args: [] },
+  { url: 'http://www.goworkable.com/', action: "Default::Extractor#get_page", args: [] },
+]
 
-msg = {
-  method: :get,
-  url: 'http://logon.com',
-  action: "Default::Extractor#all_links",
-  action_args: []
-}
+seeds.each do |seed|
+  Sneakers.publish(seed.to_json, to_queue: 'in_queue')
+end
 
-p msg
-
-pub.publish(msg.to_json, to_queue: 'web_pages')
-
-pub.instance_variable_get(:@bunny).stop

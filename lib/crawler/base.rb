@@ -28,8 +28,9 @@ module Crawler
     # Make get request to 'url' and then call 'action' with arguments(response form the request, args)
     ##
     def get!(url, callback = nil, *args)
+      start_t = Time.now
       page = @mech.get url
-      @logger.info "<GET #{url}>"
+      @logger.info "<GET #{Time.now - start_t} #{url}>"
 
       return public_send(callback, page, *args) if callback
 

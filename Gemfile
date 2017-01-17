@@ -7,6 +7,7 @@ gem 'json'
 
 gem 'redis'
 gem 'hiredis'
+gem 'mongo'
 
 gem 'droplet_kit'
 
