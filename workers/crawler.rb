@@ -13,10 +13,10 @@ Thread.abort_on_exception = true
 class WebCrawler
   include Sneakers::Worker
 
-  from_queue 'in_pages',
-              :workers => 2
-              :threads => 2,
-              :prefetch => 4,
+  from_queue 'in_queue',
+              workers: 2,
+              threads: 10,
+              prefetch: 10
 
   def work(msg)
     req = JSON.parse(msg, symbolize_names: true)
@@ -55,6 +55,7 @@ class WebCrawler
     rescue StandardError => e
       response[:status] = -3
       logger.error e
+      logger.error e.backtrace.join("\n")
     end
 
     response

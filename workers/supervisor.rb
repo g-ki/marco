@@ -1,5 +1,6 @@
 require "sneakers"
 require "json"
+require 'digest'
 
 require 'logger'
 require 'sneakers/runner'
@@ -19,7 +20,8 @@ class MarcoQueue
 
   from_queue 'out_queue',
               workers: 1,
-              threads: 2
+              threads: 2,
+              prefetch: 2
 
   def work(msg)
     res = JSON.parse(msg, symbolize_names: true)
@@ -29,6 +31,7 @@ class MarcoQueue
     res[:links].each do |link|
       next unless $redis.sadd('visited', link[:url])
 
+      link[:id] = Digest::SHA256.hexdigest(link[:url] + link[:action] + link[:args].to_s)
       publish(link.to_json, to_queue: 'in_queue')
     end
 
