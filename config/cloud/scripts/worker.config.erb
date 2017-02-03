@@ -1,14 +1,8 @@
 #!/bin/bash
 
-apt-get -y update && apt-get install -qq -y build-essential libapparmor1 aufs-tools ca-certificates --fix-missing
-
 wget -qO- https://get.docker.com/ | sh
 sudo usermod -aG docker $(whoami)
 
-sudo apt-get -y install python-pip
-sudo pip install docker-compose
-
-# docker build https://github.com/gk95/marco.git -t marco
 docker pull george95/marco
 
 docker swarm join --token <%= token %> <%= master.private_ip %>:2377
