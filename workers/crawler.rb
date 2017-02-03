@@ -15,8 +15,8 @@ class WebCrawler
 
   from_queue 'in_queue',
               workers: 2,
-              threads: 10,
-              prefetch: 10
+              threads: 20,
+              prefetch: 20
 
   def work(msg)
     req = JSON.parse(msg, symbolize_names: true)
