@@ -66,8 +66,8 @@ module Marco
         ssh.exec "docker service create --name tor-proxy -p 4444:4444 --env tors=#{tors} --network marco-net mattes/rotating-proxy:latest" if options[:useTor]
         ssh.loop
 
-        ssh.exec "docker service create --name supervisor --replicas=#{options[:supervisors]} --network marco-net marco sneakers work MarcoQueue --require workers/supervisor.rb"
-        ssh.exec "docker service create --name crawler --replicas=#{options[:crawlers]} --network marco-net marco sneakers work WebCrawler --require workers/crawler.rb"
+        ssh.exec "docker service create --name supervisor --replicas=#{options[:supervisors]} --network marco-net george95/marco sneakers work MarcoQueue --require workers/supervisor.rb"
+        ssh.exec "docker service create --name crawler --replicas=#{options[:crawlers]} --network marco-net george95/marco sneakers work WebCrawler --require workers/crawler.rb"
         ssh.loop
       end
     end
@@ -85,7 +85,9 @@ module Marco
     desc "down CLOUD", "Removes machines from the CLOUD."
     def down(cloud)
       client = Cloud::DigitalOcean.new
+      client.print_info
       client.machines.each { |m| client.delete(m.id) }
+      client.print_info
     end
 
     desc "rebuild CLOUD", "Rebuild marco image on all machines."
@@ -98,6 +100,13 @@ module Marco
         end
         puts "Machine: #{m_ip} pulled from github!!!"
       end
+    end
+
+    desc "info CLOUD", "Print status of machines."
+    def info(cloud)
+      client = Cloud::DigitalOcean.new
+      puts "Current state of #{cloud}"
+      client.print_info
     end
 
   end

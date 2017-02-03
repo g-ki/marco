@@ -1,0 +1,11 @@
+---
+token: <API_TOKEN>
+ssh_key_ids:
+  - <SSH_KEY_ID>
+
+prefix: marco
+
+droplet:
+  region: fra1
+  size: 2gb
+  image: debian-8-x64
