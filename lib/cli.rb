@@ -7,8 +7,11 @@ require_relative "cloud"
 #
 # $ marco up CLOUD
 # $ marco start CLOUD
-# $ marco stop CLOUD
+# $ marco craw CLOUD
+# $ marco pause CLOUD
 # $ marco down CLOUD
+# $ marco info CLOUD
+# $ marco rebuild CLOUD
 #
 #
 
@@ -16,77 +19,90 @@ module Marco
   class CLI < Thor
 
     desc "up CLOUD, N", "Create and prepare N machines in the CLOUD."
-    def up(cloud, n = 1)
+    option :config, type: :hash, required: true
+    def up(cloud)
+      config = options[:config]
       client = Cloud::DigitalOcean.new
 
       puts "Current state of #{cloud}"
       client.print_info
 
-      n.to_i.times do
-        client.create
+      unless client.master?
+        puts "Creating master machine"
+        client.create 'master'
+        Cloud::Setup.master(client)
+        Cloud::Setup.database(client, client.master)
       end
 
+      config.each do |type, size|
+        size.to_i.times do
+          client.create type
+        end
+      end
+
+      puts "Machines are started!"
+      client.print_info
+
+      Cloud::Setup.wait_swarm(client)
+      Cloud::Setup.label_roles(client, client.machines)
+
+      Cloud::Setup.rmq client
+      Cloud::Setup.redis client
       puts "Machines are set!"
     end
 
     desc "start CLOUD", "Start marco containers on the machines running in the CLOUD."
-    option :crawlers, required: true, type: :numeric
-    option :supervisors, type: :numeric, default: 1
-    option :useTor, type: :boolean
-    option :tors, type: :numeric
-    option :db
+    option :crawlers, type: :numeric
+    option :supervisors, type: :numeric
+    # option :useTor, type: :boolean
+    # option :tors, type: :numeric
     def start(cloud)
       client = Cloud::DigitalOcean.new
 
-      master_ip = client.master.public_ip
-      Net::SSH.start(master_ip, 'root', paranoid: false) do |ssh|
-        ssh.exec! "docker network create --driver overlay marco-net"
+      supervisors = client.machines.count { |m| m.name['supervisor'] }
+      crawlers = client.machines.count { |m| m.name['crawler'] }
 
-        if options[:db]
-          data_v = "mongodata_#{client.master.name}"
-          config_v = "mongoconfig_#{client.master.name}"
+      supervisors = options[:supervisors] if options[:supervisors]
+      crawlers = options[:crawlers] if options[:crawlers]
 
-          ssh.exec! "docker volume create --name #{data_v}"
-          ssh.exec! "docker volume create --name #{config_v}"
-
-          ssh.exec! "docker service create --network marco-net --mount type=volume,source=#{data_v},target=/data/db --mount type=volume,source=#{config_v},target=/data/configdb --constraint 'node.hostname == #{client.master.name}' --name mongo mongo:3.4"
-
-          puts "Wait mongo..."
-          sleep(10)
-
-          ssh.exec! "docker service create --name mongoclient --network marco-net -p 3000:3000 --env MONGO_URL=mongodb://mongo:27017/client mongoclient/mongoclient"
-        end
-
-        ssh.exec "docker service create --name rabbitmq -p 8080:15672 --network marco-net rabbitmq:3.6-management"
-        ssh.exec "docker service create --name redis --network marco-net redis:3.2"
-
-
-        tors = options[:tors] || options[:crawlers] * 2
-        puts "tors: #{tors}" if options[:useTor]
-        ssh.exec "docker service create --name tor-proxy -p 4444:4444 --env tors=#{tors} --network marco-net mattes/rotating-proxy:latest" if options[:useTor]
-        ssh.loop
-
-        ssh.exec "docker service create --name supervisor --replicas=#{options[:supervisors]} --network marco-net george95/marco sneakers work MarcoQueue --require workers/supervisor.rb"
-        ssh.exec "docker service create --name crawler --replicas=#{options[:crawlers]} --network marco-net george95/marco sneakers work WebCrawler --require workers/crawler.rb"
-        ssh.loop
-      end
+      Cloud::Setup.supervisor client, supervisors
+      Cloud::Setup.crawler client, crawlers
     end
 
-    desc "stop CLOUD", "Stop marco containers."
-    def stop(cloud)
+    desc "seed CLOUD", "Start crawling"
+    def seed(cloud)
       client = Cloud::DigitalOcean.new
+      Cloud::Setup.start_craw client
+    end
 
-      master_ip = client.master.public_ip
-      Net::SSH.start(master_ip, 'root', paranoid:false) do |ssh|
-        ssh.exec! "docker service rm $(docker service ls -q)"
+    desc "pause CLOUD", "Pause crawlers."
+    def pause(cloud)
+      client = Cloud::DigitalOcean.new
+      Cloud::Setup.ssh_master(client) do |ssh|
+        ssh.exec! "docker service rm $(docker service ls -q -f name=crawler)"
+        ssh.exec! "docker service rm $(docker service ls -q -f name=supervisor)"
       end
     end
+
+    # desc "stop CLOUD", "Stop marco containers."
+    # def stop(cloud)
+    #   client = Cloud::DigitalOcean.new
+
+    #   Cloud::Setup.ssh_master(client) do |ssh|
+    #     ssh.exec! "docker service rm $(docker service ls -q -f name=crawler)"
+    #     ssh.exec! "docker service rm $(docker service ls -q -f name=supervisor)"
+    #     ssh.exec! "docker service rm $(docker service ls -q -f name=redis)"
+    #     ssh.exec! "docker service rm $(docker service ls -q -f name=rabbitmq)"
+    #   end
+    # end
 
     desc "down CLOUD", "Removes machines from the CLOUD."
+    option :total, type: :boolean, aliases: '-t'
     def down(cloud)
       client = Cloud::DigitalOcean.new
       client.print_info
-      client.machines.each { |m| client.delete(m.id) }
+      client.workers.each { |m| client.delete(m.id) }
+      client.delete(client.master.id) if options[:total]
       client.print_info
     end
 
@@ -94,11 +110,10 @@ module Marco
     def rebuild(cloud)
       client = Cloud::DigitalOcean.new
       client.machines.each do |machine|
-        m_ip = machine.public_ip
-        Net::SSH.start(m_ip, 'root', paranoid: false) do |ssh|
-          ssh.exec! "docker build https://github.com/gk95/marco.git -t marco"
+        Cloud::Setup.ssh_master(client) do |ssh|
+          ssh.exec! "docker pull george95/marco"
         end
-        puts "Machine: #{m_ip} pulled from github!!!"
+        puts "Machine: #{m_ip} pulled from docker hub!!!"
       end
     end
 

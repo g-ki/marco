@@ -49,4 +49,5 @@ module Cloud
 
 end
 
+require_relative "cloud/setup"
 require_relative "cloud/digitalocean"

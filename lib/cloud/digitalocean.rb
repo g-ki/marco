@@ -49,12 +49,13 @@ module Cloud
       end
     end
 
-    def create
-      type = master? ? 'worker' : 'master'
+    def create(type = nil)
+      raise "Create master first!" if type != 'master' && !master?
 
       hostname = "#{@config['prefix']}-#{type}-#{droplets.size}" # TODO: better naming, avoid collision
 
-      userdata_file = File.join(ENV['MARCO_ROOT'], 'config', 'cloud', 'scripts', type + '.config.erb')
+      file_name = type == 'master' ? type : 'worker'
+      userdata_file = File.join(ENV['MARCO_ROOT'], 'config', 'cloud', 'scripts', file_name + '.config.erb')
 
       userdata = parse_datafile(userdata_file)
 
